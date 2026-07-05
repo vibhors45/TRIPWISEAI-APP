@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 /**
  * TripWise AI v2.0 — Intelligence Dashboard Component
  * Drop this BELOW the existing results section in TripWiseAI.jsx
@@ -248,7 +250,7 @@ function RiskAlertsPanel({ alerts }) {
 // ── 6. Booking Links ─────────────────────────────────────────────
 function BookingLinksPanel({ data }) {
   if (!data) return null;
-  const [tab, setTab] = React.useState("flights");
+  const [tab, setTab] = useState("flights");
   const tabs = [
     { key: "flights", label: "✈ Flights", items: data.flights },
     { key: "trains",  label: "🚆 Trains",  items: data.trains },

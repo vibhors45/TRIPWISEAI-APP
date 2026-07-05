@@ -18,3 +18,5 @@ dist/
 
 # MacOS
 .DS_Store
+tripwise-backend/.env.example
+tripwise-backend/.env
