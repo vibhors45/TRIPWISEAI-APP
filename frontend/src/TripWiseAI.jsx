@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import TripDashboardV2 from "./TripDashboardV2";
 
 const HERO_SLIDES = [
   { name: "Santorini, Greece", img: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1600&q=80", tag: "Island Luxury" },
@@ -307,7 +308,7 @@ function DestCard({ dest, rank, onExplore }) {
 
 export default function TripWiseAI() {
   const [slide, setSlide] = useState(0);
-  const [form, setForm] = useState({ destination: "", from: "Lucknow", days: "4", travelers: "2", budget: "30000", style: "Budget Explorer" });
+  const [form, setForm] = useState({ destination: "", from: "Lucknow", days: "4", travelers: "2", budget: "30000", style: "Budget Explorer", travel_date: "" });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -328,26 +329,46 @@ export default function TripWiseAI() {
     if (!form.destination.trim()) { setError("Please enter a destination or preference."); return; }
     setError(""); setLoading(true); setResult(null);
     try {
-      const res = await fetch("/api/trips/plan", {
+      // ── v2.0: Call the upgraded intelligence endpoint ──────────
+      const res = await fetch("/api/v2/trips/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source_city: form.from, destination: form.destination, budget: parseInt(form.budget), travelers: parseInt(form.travelers), days: parseInt(form.days), travel_style: form.style }),
+        body: JSON.stringify({
+          source_city: form.from,
+          destination: form.destination,
+          budget: parseInt(form.budget),
+          travelers: parseInt(form.travelers),
+          days: parseInt(form.days),
+          travel_style: form.style,
+          travel_date: form.travel_date || null,
+        }),
       });
       if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.detail || `Server error: ${res.status}`); }
       const parsed = await res.json();
-      const enriched = await Promise.all(parsed.destinations.map(async (dest) => {
+
+      // ── Enrich destinations with frontend geocoding + images ──
+      // (Backend already does this for v2, but fallback if missing)
+      const enriched = await Promise.all((parsed.destinations || []).map(async (dest) => {
+        if (dest.heroImg && dest.coords) return dest; // already enriched by backend
         const heroQuery = encodeURIComponent(`${dest.name} city landmark travel`);
-        let heroImg = `https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80`;
+        let heroImg = dest.heroImg || `https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80`;
         try { const hr = await fetch(`https://api.unsplash.com/search/photos?query=${heroQuery}&per_page=1&orientation=landscape&client_id=AO3e2PfxNHhwzVN1C0GHD4TqfxBLOrS4LZMDKMhvXkg`); const hd = await hr.json(); if (hd.results?.[0]?.urls?.regular) heroImg = hd.results[0].urls.regular; } catch {}
-        const coords = await geocodePlace(dest.name);
-        const attractions = await Promise.all((dest.attractions || []).map(async (a) => { const [img, aCoords] = await Promise.all([fetchAttractionImages(a.name, dest.name), geocodePlace(`${a.name}, ${dest.name}`)]); return { ...a, img, coords: aCoords }; }));
+        const coords = dest.coords || await geocodePlace(dest.name);
+        const attractions = await Promise.all((dest.attractions || []).map(async (a) => {
+          if (a.img && a.coords) return a;
+          const [img, aCoords] = await Promise.all([fetchAttractionImages(a.name, dest.name), geocodePlace(`${a.name}, ${dest.name}`)]);
+          return { ...a, img: a.img || img, coords: a.coords || aCoords };
+        }));
         return { ...dest, heroImg, coords, attractions };
       }));
+
       setResult({ ...parsed, destinations: enriched });
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (e) {
       console.error(e);
-      setError(e.message?.includes("Server error") || e.message?.includes("Failed to fetch") ? "Could not connect to the backend. Make sure the server is running on port 8000." : e.message || "Something went wrong. Please try again.");
+      setError(e.message?.includes("Server error") || e.message?.includes("Failed to fetch")
+        ? "Could not connect to the backend. Make sure the server is running on port 8000."
+        : e.message || "Something went wrong. Please try again.");
     } finally { setLoading(false); }
   };
 
@@ -390,7 +411,7 @@ export default function TripWiseAI() {
 
         <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", width: "92%", maxWidth: 860, background: "rgba(10,10,20,0.75)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "28px 32px", zIndex: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 14, marginBottom: 16 }}>
-            {[{ label: "Departure City", key: "from", type: "text", placeholder: "e.g. Lucknow" }, { label: "Destination / Preference", key: "destination", type: "text", placeholder: "e.g. Beach, Goa, Hills" }, { label: "Trip Days", key: "days", type: "number", placeholder: "4" }, { label: "Travelers", key: "travelers", type: "number", placeholder: "2" }, { label: "Budget (₹)", key: "budget", type: "number", placeholder: "30000" }].map(({ label, key, type, placeholder }) => (
+            {[{ label: "Departure City", key: "from", type: "text", placeholder: "e.g. Lucknow" }, { label: "Destination / Preference", key: "destination", type: "text", placeholder: "e.g. Beach, Goa, Hills" }, { label: "Travel Date", key: "travel_date", type: "date", placeholder: "" }, { label: "Trip Days", key: "days", type: "number", placeholder: "4" }, { label: "Travelers", key: "travelers", type: "number", placeholder: "2" }, { label: "Budget (₹)", key: "budget", type: "number", placeholder: "30000" }].map(({ label, key, type, placeholder }) => (
               <div key={key}>
                 <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, letterSpacing: 0.5, fontFamily: "sans-serif", fontWeight: 500 }}>{label.toUpperCase()}</div>
                 <input type={type} value={form[key]} onChange={e => update(key, e.target.value)} placeholder={placeholder} style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#fff", outline: "none", fontFamily: "sans-serif", boxSizing: "border-box" }} onFocus={e => e.target.style.borderColor = "rgba(245,158,11,0.6)"} onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.15)"} />
@@ -448,6 +469,9 @@ export default function TripWiseAI() {
           </div>
         </div>
       )}
+
+      {/* ── TripWise AI v2.0 Intelligence Dashboard ── */}
+      {result && <TripDashboardV2 result={result} budget={parseInt(form.budget) || 30000} />}
 
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "24px 40px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontFamily: "Georgia,serif", fontSize: 16, fontWeight: 700 }}><span style={{ color: "#f59e0b" }}>Trip</span>Wise AI</div>
