@@ -171,7 +171,7 @@ Use this exact structure:
         "X-Title": "TripWise AI",
     }
     body = {
-        "model": "meta-llama/llama-3.1-8b-instruct:free",
+        "model": "openrouter/auto",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 3000,
         "temperature": 0.3,
